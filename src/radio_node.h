@@ -26,10 +26,12 @@ class RadioNode {
             BeaconState_t *beaconState,
             long beaconId
         );
+        uint8_t read(uint8_t* buffer);
         uint8_t getChannel(void);
         uint32_t getChannelEntryMillis(void);
         void handleTxDoneState(bool hop);
         void handleTx(QspConfiguration_t *qsp);
+        void handlePassthroughtTx(uint8_t* buffer, size_t size);
         void set(
             uint8_t power, 
             long bandwidth, 

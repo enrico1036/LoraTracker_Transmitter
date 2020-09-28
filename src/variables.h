@@ -11,13 +11,15 @@
 #define QSP_PAYLOAD_LENGTH 32
 
 #define MIN_PACKET_SIZE 3 //Min theorethical size of valid packet 
-#define MAX_PACKET_SIZE 34 //Max theorethical size of valid packet
+#define MAX_PACKET_SIZE 36 //Max theorethical size of valid packet
 #define NO_DATA_TO_READ -1
 
 enum qspFrames {
     QSP_FRAME_IDENT = 0,
     QSP_FRAME_COORDS,
     QSP_FRAME_MISC,
+    QSP_FRAME_PASSTHROUGHT,
+
     QSP_FRAME_COUNT
 };
 
@@ -27,6 +29,7 @@ static const uint8_t qspFrameLengths[QSP_FRAME_COUNT] = {
 
 enum dataStates {
     QSP_STATE_IDLE,
+    QSP_STATE_WAIT_FOR_FRAME_LENGHT,
     QSP_STATE_FRAME_TYPE_RECEIVED,
     QSP_STATE_PAYLOAD_RECEIVED,
     QSP_STATE_CRC_RECEIVED

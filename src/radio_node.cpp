@@ -93,6 +93,22 @@ void RadioNode::readAndDecode(
     }
 }
 
+uint8_t RadioNode::read(uint8_t* buffer) {
+    /*
+     * There is data to be read from radio!
+     */
+    if (bytesToRead != NO_DATA_TO_READ) {
+        LoRa.read(buffer, bytesToRead);
+
+        //After reading, flush radio buffer, we have no need for whatever might be over there
+        LoRa.sleep();
+        LoRa.receive();
+
+        radioState = RADIO_STATE_RX;
+        bytesToRead = NO_DATA_TO_READ;
+    }
+}
+
 void RadioNode::hopFrequency(bool forward, uint8_t fromChannel, uint32_t timestamp) {
     _channelEntryMillis = timestamp;
 
@@ -146,6 +162,23 @@ void RadioNode::handleTx(QspConfiguration_t *qsp) {
     qspEncodeFrame(qsp, tmpBuffer, &size, getChannel());
     //Sent it to radio in one SPI transaction
     LoRa.write(tmpBuffer, size);
+    LoRa.endPacketAsync();
+
+    //Set state to be able to detect the moment when TX is done
+    radioState = RADIO_STATE_TX;
+}
+
+void RadioNode::handlePassthroughtTx(uint8_t* buffer, size_t size) {
+
+    if (!canTransmit) {
+        return;
+    }
+
+    LoRa.beginPacket();
+    //Prepare packet
+
+    //Sent it to radio in one SPI transaction
+    LoRa.write(buffer, size);
     LoRa.endPacketAsync();
 
     //Set state to be able to detect the moment when TX is done

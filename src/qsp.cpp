@@ -48,11 +48,33 @@ void qspDecodeIncomingFrame(
 
         //Frame ID and payload length
         qspComputeCrc(qsp, incomingByte);
-
         qsp->frameId = (incomingByte >> 4) & 0x0f;
-        payloadLength = qspFrameLengths[qsp->frameId];
+        
         receivedChannel = incomingByte & 0x0f;
-        qsp->protocolState = QSP_STATE_FRAME_TYPE_RECEIVED;
+        if(qsp->frameId == QSP_FRAME_PASSTHROUGHT)
+        {
+            payloadLength = 0;
+            qsp->protocolState = QSP_STATE_WAIT_FOR_FRAME_LENGHT;
+        }
+        else
+        {
+            payloadLength = qspFrameLengths[qsp->frameId];
+            qsp->protocolState = QSP_STATE_FRAME_TYPE_RECEIVED;
+        }
+        
+    }
+    else if (qsp->protocolState == QSP_STATE_WAIT_FOR_FRAME_LENGHT)
+    {
+        qspComputeCrc(qsp, incomingByte);
+        if(incomingByte < QSP_PAYLOAD_LENGTH)
+        {
+            payloadLength = incomingByte;
+            qsp->protocolState = QSP_STATE_FRAME_TYPE_RECEIVED;
+        }
+        else
+        {
+            qsp->protocolState = QSP_STATE_IDLE;
+        }
     }
     else if (qsp->protocolState == QSP_STATE_FRAME_TYPE_RECEIVED)
     {
