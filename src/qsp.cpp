@@ -39,6 +39,8 @@ void qspDecodeIncomingFrame(
     static uint8_t receivedPayload;
     static uint8_t receivedChannel;
 
+    Serial.print("protocolState: "); Serial.print(qsp->protocolState); Serial.print(" byte: "); Serial.println(incomingByte); 
+
     if (qsp->protocolState == QSP_STATE_IDLE)
     {
         qsp->crc = 0;
@@ -69,6 +71,7 @@ void qspDecodeIncomingFrame(
         if(incomingByte < QSP_PAYLOAD_LENGTH)
         {
             payloadLength = incomingByte;
+            Serial.print("Payload lenght: "); Serial.println(payloadLength);
             qsp->protocolState = QSP_STATE_FRAME_TYPE_RECEIVED;
         }
         else

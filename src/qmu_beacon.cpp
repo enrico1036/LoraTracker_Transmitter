@@ -30,12 +30,19 @@ BeaconState_t beaconState = {};
 uint8_t serialRxBuffer[MAX_PACKET_SIZE];
 size_t serialRxBytes = 0;
 
+uint8_t loraRxBuffer[MAX_PACKET_SIZE];
+size_t loraRxBytes = 0;
+
 void onReceive(int packetSize);
-void onLoraReceive(QspConfiguration_t* pqsp, BeaconState_t* pbeacon, uint8_t receivedChannel);
+void onQspSuccess(QspConfiguration_t* pqsp, BeaconState_t* pbeacon, uint8_t receivedChannel);
+void onQspFailure(QspConfiguration_t* pqsp, BeaconState_t* pbeacon);
 
 void setup()
 {
     Serial.begin(115200);
+	
+	qsp.onSuccessCallback = onQspSuccess;
+    qsp.onFailureCallback = onQspFailure;
 
     randomSeed(analogRead(A4));
     platformNode.seed();
@@ -44,8 +51,6 @@ void setup()
     radioNode.init(LORA_CS, LORA_RST, LORA_IRQ, onReceive);
     radioNode.reset();
     radioNode.canTransmit = true;
-
-	qsp.onSuccessCallback = onLoraReceive;
 
 	pinMode(LED_BUILTIN, OUTPUT);
     pinMode(GPS_POWER_PIN, OUTPUT);
@@ -68,135 +73,170 @@ void loop()
     }
 
 
-    while(Serial.available() > 0)
-    {
-        serialRxBuffer[serialRxBytes] = Serial.read();
-        if(++serialRxBytes >= MAX_PACKET_SIZE)
+    // while(Serial.available() > 0)
+    // {
+    //     serialRxBuffer[serialRxBytes] = Serial.read();
+    //     if(++serialRxBytes >= MAX_PACKET_SIZE)
+    //     {
+    //         break;
+    //     }
+    // }
+
+
+	// if(serialRxBytes > 0)
+	// {
+	// 	LoRa.beginPacket();
+	// 	LoRa.write(serialRxBuffer, serialRxBytes);
+	// 	LoRa.endPacket();
+	// 	// LoRa.receive();
+	// 	serialRxBytes = 0;
+	// }
+
+	while(LoRa.available() > 0)
+	{
+		loraRxBuffer[loraRxBytes] = LoRa.read();
+		if(++loraRxBytes >= MAX_PACKET_SIZE)
         {
             break;
         }
-    }
+	}
 
-    //Beacon is never hopping frequency
-    radioNode.handleTxDoneState(false);
+	if(loraRxBytes > 0)
+	{
+		Serial.write(loraRxBuffer, loraRxBytes);
+		loraRxBytes = 0;
+	}
 
-    radioNode.readAndDecode(
-        &qsp,
-        &beaconState,
-        platformNode.beaconId
-    );
 
-    if (
-        nextTxTaskTs < millis() && 
-        qsp.protocolState == QSP_STATE_IDLE && 
-        radioNode.radioState == RADIO_STATE_RX
-    ) {
 
-        qsp.frameToSend = QSP_FRAME_IDENT;
-        qspClearPayload(&qsp);
+//     //Beacon is never hopping frequency
+//     radioNode.handleTxDoneState(false);
 
-        static int8_t frameToSend = -1;
-        frameToSend++;
-        if (frameToSend == QSP_FRAME_COUNT || gps.satellites.value() < 6) {
-            frameToSend = QSP_FRAME_IDENT;
-        }
+//     radioNode.readAndDecode(
+//         &qsp,
+//         &beaconState,
+//         platformNode.beaconId
+//     );
 
-		if(serialRxBytes > 0)
-		{
-			frameToSend = QSP_FRAME_PASSTHROUGHT;
-		}
+//     if (
+//         nextTxTaskTs < millis() && 
+//         qsp.protocolState == QSP_STATE_IDLE && 
+//         radioNode.radioState == RADIO_STATE_RX
+//     ) {
 
-        int32ToBuf(qsp.payload, 0, platformNode.beaconId);
+// 		Serial.print("serialRxBytes: "); Serial.println(serialRxBytes);
 
-        long writeValue;
+//         qsp.frameToSend = QSP_FRAME_IDENT;
+//         qspClearPayload(&qsp);
 
-        if (frameToSend == QSP_FRAME_IDENT) {
-            qsp.payloadLength = 4;
-            qsp.frameToSend = QSP_FRAME_IDENT;
-        } else if (frameToSend == QSP_FRAME_COORDS) {
+//         static int8_t frameToSend = -1;
+//         frameToSend++;
+//         if (frameToSend == QSP_FRAME_COUNT || gps.satellites.value() < 6) {
+//             frameToSend = QSP_FRAME_IDENT;
+//         }
+
+// 		if(serialRxBytes > 0)
+// 		{
+// 			frameToSend = QSP_FRAME_PASSTHROUGHT;
+// 		}
+
+//         int32ToBuf(qsp.payload, 0, platformNode.beaconId);
+
+//         long writeValue;
+
+//         if (frameToSend == QSP_FRAME_IDENT) {
+//             qsp.payloadLength = 4;
+//             qsp.frameToSend = QSP_FRAME_IDENT;
+//         } else if (frameToSend == QSP_FRAME_COORDS) {
             
-            writeValue = gps.location.lat() * 10000000.0;
-            int32ToBuf(qsp.payload, 4, writeValue);
+//             writeValue = gps.location.lat() * 10000000.0;
+//             int32ToBuf(qsp.payload, 4, writeValue);
 
-            writeValue = gps.location.lng() * 10000000.0;
-            int32ToBuf(qsp.payload, 8, writeValue);
+//             writeValue = gps.location.lng() * 10000000.0;
+//             int32ToBuf(qsp.payload, 8, writeValue);
 
-            qsp.frameToSend = QSP_FRAME_COORDS;
-            qsp.payloadLength = 12;
-        } else if (frameToSend == QSP_FRAME_MISC) {
-            writeValue = gps.hdop.value();
-            int32ToBuf(qsp.payload, 4, writeValue);
+//             qsp.frameToSend = QSP_FRAME_COORDS;
+//             qsp.payloadLength = 12;
+//         } else if (frameToSend == QSP_FRAME_MISC) {
+//             writeValue = gps.hdop.value();
+//             int32ToBuf(qsp.payload, 4, writeValue);
 
-            writeValue = gps.speed.mps() * 100.0;
-            int32ToBuf(qsp.payload, 8, writeValue);
+//             writeValue = gps.speed.mps() * 100.0;
+//             int32ToBuf(qsp.payload, 8, writeValue);
 
-            writeValue = gps.altitude.meters() * 100.0;
-            int32ToBuf(qsp.payload, 12, writeValue);
+//             writeValue = gps.altitude.meters() * 100.0;
+//             int32ToBuf(qsp.payload, 12, writeValue);
 
-            qsp.payload[16] = gps.satellites.value();
+//             qsp.payload[16] = gps.satellites.value();
 
-            qsp.frameToSend = QSP_FRAME_MISC;
-            qsp.payloadLength = 17;
-		} else if (frameToSend == QSP_FRAME_PASSTHROUGHT){
-			qsp.payload[5] = serialRxBytes;
-			memcpy(&qsp.payload[6], serialRxBuffer, serialRxBytes);
-			qsp.frameToSend = QSP_FRAME_PASSTHROUGHT;
-            qsp.payloadLength = 5 + serialRxBytes;
-			serialRxBytes = 0;
-		}
+//             qsp.frameToSend = QSP_FRAME_MISC;
+//             qsp.payloadLength = 17;
+// 		} else if (frameToSend == QSP_FRAME_PASSTHROUGHT){
+// 			qsp.payload[5] = serialRxBytes;
+// 			memcpy(&qsp.payload[6], serialRxBuffer, serialRxBytes);
+// 			qsp.frameToSend = QSP_FRAME_PASSTHROUGHT;
+//             qsp.payloadLength = 1 + serialRxBytes;
+// 			serialRxBytes = 0;
+// 		}
 
-        transmitPayload = true;
+//         transmitPayload = true;
 
-        nextTxTaskTs = millis() + TASK_TX_RATE;
-    }
+//         nextTxTaskTs = millis() + TASK_TX_RATE;
+//     }
 
-    if (transmitPayload)
-    {
-        radioNode.handleTx(&qsp);
-        // radioNode.handlePassthroughtTx(serialRxBuffer, serialRxBytes);
-        // serialRxBytes = 0;
-    }
+//     if (transmitPayload)
+//     {
+//         radioNode.handleTx(&qsp);
+//         // radioNode.handlePassthroughtTx(serialRxBuffer, serialRxBytes);
+//         // serialRxBytes = 0;
+//     }
 
-    if (nextSerialTaskTs < millis()) {
-        // Serial.print("LAT=");  Serial.println(gps.location.lat(), 6);
-        // Serial.print("LONG="); Serial.println(gps.location.lng(), 6);
-        // Serial.print("ALT=");  Serial.println(gps.altitude.meters());
-        // Serial.print("Sats=");  Serial.println(gps.satellites.value());
-        // Serial.print("HDOP=");  Serial.println(gps.hdop.value());
-        // Serial.print("BeaconId=");  Serial.println(platformNode.beaconId);
+//     if (nextSerialTaskTs < millis()) {
+//         // Serial.print("LAT=");  Serial.println(gps.location.lat(), 6);
+//         // Serial.print("LONG="); Serial.println(gps.location.lng(), 6);
+//         // Serial.print("ALT=");  Serial.println(gps.altitude.meters());
+//         // Serial.print("Sats=");  Serial.println(gps.satellites.value());
+//         // Serial.print("HDOP=");  Serial.println(gps.hdop.value());
+//         // Serial.print("BeaconId=");  Serial.println(platformNode.beaconId);
         
-        // Serial.println();
+//         // Serial.println();
 
-        nextSerialTaskTs = millis() + TASK_SERIAL_RATE;
-    }
+//         nextSerialTaskTs = millis() + TASK_SERIAL_RATE;
+//     }
 }
 
 void onReceive(int packetSize)
 {
-    /*
-     * We can start reading only when radio is not reading.
-     * If not reading, then we might start
-     */
-    if (radioNode.bytesToRead == NO_DATA_TO_READ) {
-        if (packetSize >= MIN_PACKET_SIZE && packetSize <= MAX_PACKET_SIZE) {
-            //We have a packet candidate that might contain a valid QSP packet
-            radioNode.bytesToRead = packetSize;
-        } else {
-            /*
-            That packet was not very interesting, just flush it, we have no use
-            */
-            LoRa.sleep();
-            LoRa.receive();
-            radioNode.radioState = RADIO_STATE_RX;
-        }
-    }
+	digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    // /*
+    //  * We can start reading only when radio is not reading.
+    //  * If not reading, then we might start
+    //  */
+	// Serial.print("LoraPacketSize: "); Serial.println(packetSize);
+    // if (radioNode.bytesToRead == NO_DATA_TO_READ) {
+    //     if (packetSize >= MIN_PACKET_SIZE && packetSize <= MAX_PACKET_SIZE) {
+    //         //We have a packet candidate that might contain a valid QSP packet
+    //         radioNode.bytesToRead = packetSize;
+    //     } else {
+    //         /*
+    //         That packet was not very interesting, just flush it, we have no use
+    //         */
+    //         LoRa.sleep();
+    //         LoRa.receive();
+    //         radioNode.radioState = RADIO_STATE_RX;
+    //     }
+    // }
 }
 
-void onLoraReceive(QspConfiguration_t* pqsp, BeaconState_t* pbeacon, uint8_t receivedChannel)
+void onQspSuccess(QspConfiguration_t* pqsp, BeaconState_t* pbeacon, uint8_t receivedChannel)
 {
 	if(pqsp->payloadLength > 0)
 		{
 			digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
 			Serial.write(pqsp->payload, pqsp->payloadLength);
 		}
+}
+
+void onQspFailure(QspConfiguration_t* pqsp, BeaconState_t* pbeacon)
+{
 }
